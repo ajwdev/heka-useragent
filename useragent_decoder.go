@@ -23,7 +23,7 @@ type UserAgentDecoder struct {
 func (ua *UserAgentDecoder) ConfigStruct() interface{} {
 	globals := ua.pConfig.Globals
 	return &UserAgentDecoderConfig{
-		UserAgentFile: globals.PrependShareDir("ua_regexes.yaml"),
+		UserAgentFile: globals.PrependShareDir("useragent/regexes.yaml"),
 		SourceField:   "",
 	}
 }
