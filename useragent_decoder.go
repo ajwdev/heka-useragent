@@ -66,22 +66,22 @@ func (ua *UserAgentDecoder) Init(config interface{}) (err error) {
 	return
 }
 
-func (ua *UserAgentDecoder) GetAgent(uaStr string) *uaparser.Client {
+func (ua *UserAgentDecoder) GetAgent(uaStr string) (*uaparser.Client, bool) {
 	var uaClient *uaparser.Client
 
 	if ua.CacheSize > 0 {
 		if val, ok := ua.cache.Get(uaStr); !ok {
 			uaClient = ua.parser.Parse(uaStr)
-			// TODO Track evictions
+			// TODO We should track cache evictions
 			ua.cache.Add(uaStr, uaClient)
 		} else {
-			uaClient = val.(*uaparser.Client)
+			return val.(*uaparser.Client), true
 		}
 	} else {
 		uaClient = ua.parser.Parse(uaStr)
 	}
 
-	return uaClient
+	return uaClient, false
 }
 
 func (ua *UserAgentDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, err error) {
@@ -95,7 +95,8 @@ func (ua *UserAgentDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, e
 	}
 
 	if ua.parser != nil {
-		uaClient := ua.GetAgent(agentStr)
+		// TODO Track cache hits/misses
+		uaClient, _ := ua.GetAgent(agentStr)
 
 		var nf *message.Field
 

@@ -75,7 +75,7 @@ func TestAgentParse(t *testing.T) {
 	var result string
 	for _, v := range []int{0, 10} {
 		decoder := buildDecoder(v)
-		agent := decoder.GetAgent(agentStr)
+		agent, _ := decoder.GetAgent(agentStr)
 
 		expected = "Mobile Safari"
 		if result = agent.UserAgent.Family; expected != result {
@@ -105,6 +105,26 @@ func TestAgentParse(t *testing.T) {
 		if result = agent.Device.Family; expected != result {
 			t.Errorf("incorrect device family; expected '%s', got '%s'", expected, result)
 		}
+	}
+}
+
+func TestAgentCached(t *testing.T) {
+	agent := "fooo"
+	decoder := buildDecoder(10)
+
+	if _, cached := decoder.GetAgent(agent); cached != false {
+		t.Error("expected cache miss but got a hit")
+	}
+	if _, cached := decoder.GetAgent(agent); cached != true {
+		t.Error("expected cache hit but got a miss")
+	}
+
+	decoder = buildDecoder(0)
+	if _, cached := decoder.GetAgent(agent); cached != false {
+		t.Error("expected cache miss but got a hit")
+	}
+	if _, cached := decoder.GetAgent(agent); cached != false {
+		t.Error("expected cache miss but got a hit")
 	}
 }
 
