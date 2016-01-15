@@ -1,10 +1,19 @@
 package useragent
 
 import (
+	"math/rand"
+	"os"
+	"strconv"
+	"sync"
 	"testing"
+	"time"
 )
 
+const AgentQueueLength = 1000
+
 var (
+	seedSetup sync.Once
+
 	realAgents = [11]string{
 		"Manticore 0.4.1",
 		"Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1",
@@ -37,6 +46,23 @@ func buildDecoder(cacheSize int) *UserAgentDecoder {
 	})
 
 	return decoder
+}
+
+func buildRandomAgentOrder(group, upto int) (result []int) {
+	seedSetup.Do(func() {
+		seed, err := strconv.ParseInt(os.Getenv("SEED"), 10, 64)
+		if seed == 0 || err != nil {
+			seed = time.Now().UnixNano()
+		}
+		rand.Seed(seed)
+	})
+
+	result = make([]int, upto)
+	for i := 0; i < upto; i++ {
+		result[i] = rand.Intn(group)
+	}
+
+	return
 }
 
 func TestAgentParse(t *testing.T) {
@@ -86,35 +112,94 @@ func TestAgentParse(t *testing.T) {
 // TODO Add tests that verify long version name of the OS (i.e the field ua_os)
 
 func BenchmarkAgentParse(b *testing.B) {
-	decoder := buildDecoder()
-
 	agents := append(badAgents[:], realAgents[:]...)
-	fixtureLength := len(agents)
+	input := buildRandomAgentOrder(len(agents), AgentQueueLength)
+	inputLen := len(input)
 
+	decoder := buildDecoder(0)
+
+	var idx = 0
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		decoder.GetAgent(agents[i%fixtureLength])
+		idx = input[i%inputLen]
+		decoder.GetAgent(agents[idx])
+	}
+}
+
+func BenchmarkAgentParse50PercentCache(b *testing.B) {
+	agents := append(badAgents[:], realAgents[:]...)
+	agentsLen := len(agents)
+	input := buildRandomAgentOrder(agentsLen, AgentQueueLength)
+	inputLen := len(input)
+
+	ratioSize := agentsLen / 2
+	decoder := buildDecoder(ratioSize)
+
+	var idx = 0
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		idx = input[i%inputLen]
+		decoder.GetAgent(agents[idx])
+	}
+}
+
+func BenchmarkAgentParse90PercentCache(b *testing.B) {
+	agents := append(badAgents[:], realAgents[:]...)
+	agentsLen := len(agents)
+	input := buildRandomAgentOrder(agentsLen, AgentQueueLength)
+	inputLen := len(input)
+
+	ratioSize := int(float64(agentsLen) * 0.90)
+	decoder := buildDecoder(ratioSize)
+
+	var idx = 0
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		idx = input[i%inputLen]
+		decoder.GetAgent(agents[idx])
+	}
+}
+
+func BenchmarkAgentParse100PercentCache(b *testing.B) {
+	agents := append(badAgents[:], realAgents[:]...)
+	agentsLen := len(agents)
+	input := buildRandomAgentOrder(agentsLen, AgentQueueLength)
+	inputLen := len(input)
+
+	decoder := buildDecoder(agentsLen)
+
+	var idx = 0
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		idx = input[i%inputLen]
+		decoder.GetAgent(agents[idx])
 	}
 }
 
 func BenchmarkRealAgentParse(b *testing.B) {
-	decoder := buildDecoder()
+	input := buildRandomAgentOrder(len(realAgents), AgentQueueLength)
+	inputLen := len(input)
 
-	fixtureLength := len(realAgents)
+	decoder := buildDecoder(0)
 
+	var idx = 0
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		decoder.GetAgent(realAgents[i%fixtureLength])
+		idx = input[i%inputLen]
+		decoder.GetAgent(realAgents[idx])
 	}
 }
 
 func BenchmarkBadAgentParse(b *testing.B) {
-	decoder := buildDecoder()
+	input := buildRandomAgentOrder(len(badAgents), AgentQueueLength)
+	inputLen := len(input)
 
-	fixtureLength := len(badAgents)
+	decoder := buildDecoder(0)
 
+	var idx = 0
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		decoder.GetAgent(badAgents[i%fixtureLength])
+		idx = input[i%inputLen]
+		decoder.GetAgent(badAgents[idx])
 	}
 }
