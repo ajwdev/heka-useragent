@@ -28,11 +28,12 @@ var (
 	}
 )
 
-func buildDecoder() *UserAgentDecoder {
+func buildDecoder(cacheSize int) *UserAgentDecoder {
 	decoder := new(UserAgentDecoder)
 	decoder.Init(&UserAgentDecoderConfig{
 		UserAgentFile: "uap-core/regexes.yaml",
 		SourceField:   "doesntmatter",
+		CacheSize:     cacheSize,
 	})
 
 	return decoder
@@ -42,39 +43,42 @@ func TestAgentParse(t *testing.T) {
 	// NOTE This is intentionally non-exhaustive as the upstream uaparser
 	// library has plenty of tests that verify the parsing.
 	agentStr := "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1"
-	decoder := buildDecoder()
 
-	agent := decoder.GetAgent(agentStr)
+	// Run once without a cache and once with a cache
 	var expected string
 	var result string
+	for _, v := range []int{0, 10} {
+		decoder := buildDecoder(v)
+		agent := decoder.GetAgent(agentStr)
 
-	expected = "Mobile Safari"
-	if result = agent.UserAgent.Family; expected != result {
-		t.Errorf("incorrect user agent family; expected '%s', got '%s'", expected, result)
-	}
-	expected = "9"
-	if result = agent.UserAgent.Major; expected != result {
-		t.Errorf("incorrect user agent major; expected '%s', got '%s'", expected, result)
-	}
-	expected = "0"
-	if result = agent.UserAgent.Minor; expected != result {
-		t.Errorf("incorrect user agent minor; expected '%s', got '%s'", expected, result)
-	}
-	expected = "iOS"
-	if result = agent.Os.Family; expected != result {
-		t.Errorf("incorrect os family; expected '%s', got '%s'", expected, result)
-	}
-	expected = "9"
-	if result = agent.Os.Major; expected != result {
-		t.Errorf("incorrect os major; expected '%s', got '%s'", expected, result)
-	}
-	expected = "1"
-	if result = agent.Os.Minor; expected != result {
-		t.Errorf("incorrect os minor; expected '%s', got '%s'", expected, result)
-	}
-	expected = "iPhone"
-	if result = agent.Device.Family; expected != result {
-		t.Errorf("incorrect device family; expected '%s', got '%s'", expected, result)
+		expected = "Mobile Safari"
+		if result = agent.UserAgent.Family; expected != result {
+			t.Errorf("incorrect user agent family; expected '%s', got '%s'", expected, result)
+		}
+		expected = "9"
+		if result = agent.UserAgent.Major; expected != result {
+			t.Errorf("incorrect user agent major; expected '%s', got '%s'", expected, result)
+		}
+		expected = "0"
+		if result = agent.UserAgent.Minor; expected != result {
+			t.Errorf("incorrect user agent minor; expected '%s', got '%s'", expected, result)
+		}
+		expected = "iOS"
+		if result = agent.Os.Family; expected != result {
+			t.Errorf("incorrect os family; expected '%s', got '%s'", expected, result)
+		}
+		expected = "9"
+		if result = agent.Os.Major; expected != result {
+			t.Errorf("incorrect os major; expected '%s', got '%s'", expected, result)
+		}
+		expected = "1"
+		if result = agent.Os.Minor; expected != result {
+			t.Errorf("incorrect os minor; expected '%s', got '%s'", expected, result)
+		}
+		expected = "iPhone"
+		if result = agent.Device.Family; expected != result {
+			t.Errorf("incorrect device family; expected '%s', got '%s'", expected, result)
+		}
 	}
 }
 

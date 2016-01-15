@@ -3,6 +3,7 @@ package useragent
 import (
 	"errors"
 	"fmt"
+	"github.com/hashicorp/golang-lru"
 	"github.com/mozilla-services/heka/message"
 	. "github.com/mozilla-services/heka/pipeline"
 	"github.com/ua-parser/uap-go/uaparser"
@@ -11,13 +12,16 @@ import (
 type UserAgentDecoderConfig struct {
 	UserAgentFile string `toml:"useragent_file"`
 	SourceField   string `toml:"source_field"`
+	CacheSize     int    `toml:"cache_size"`
 }
 
 type UserAgentDecoder struct {
 	UserAgentFile string
 	SourceField   string
+	CacheSize     int
 	parser        *uaparser.Parser
 	pConfig       *PipelineConfig
+	cache         *lru.TwoQueueCache
 }
 
 func (ua *UserAgentDecoder) ConfigStruct() interface{} {
@@ -25,6 +29,7 @@ func (ua *UserAgentDecoder) ConfigStruct() interface{} {
 	return &UserAgentDecoderConfig{
 		UserAgentFile: globals.PrependShareDir("ua_regexes.yaml"),
 		SourceField:   "",
+		CacheSize:     0,
 	}
 }
 
@@ -48,16 +53,35 @@ func (ua *UserAgentDecoder) Init(config interface{}) (err error) {
 		return fmt.Errorf("Could not open user agent regex file: %s\n")
 	}
 
+	if conf.CacheSize > 0 {
+		ua.CacheSize = conf.CacheSize
+		// We're just using the default cache values
+		// defined by the LRU library. Should these be tweakable?
+		ua.cache, err = lru.New2Q(ua.CacheSize)
+		if err != nil {
+			return
+		}
+	}
+
 	return
 }
 
 func (ua *UserAgentDecoder) GetAgent(uaStr string) *uaparser.Client {
-	// TODO Add caching for performance because parsing the large number of
-	// regexes that we do is not cheap. Also, its common that a single
-	// user/browser will make several requests concurrently which means our
-	// user agent strings will likely be close to one another in our input
-	// stream.
-	return ua.parser.Parse(uaStr)
+	var uaClient *uaparser.Client
+
+	if ua.CacheSize > 0 {
+		if val, ok := ua.cache.Get(uaStr); !ok {
+			uaClient = ua.parser.Parse(uaStr)
+			// TODO Track evictions
+			ua.cache.Add(uaStr, uaClient)
+		} else {
+			uaClient = val.(*uaparser.Client)
+		}
+	} else {
+		uaClient = ua.parser.Parse(uaStr)
+	}
+
+	return uaClient
 }
 
 func (ua *UserAgentDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, err error) {
