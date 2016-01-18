@@ -176,13 +176,17 @@ func (ua *UserAgentDecoder) ReportMsg(msg *message.Message) error {
 
 	hit := atomic.LoadInt64(&ua.processCacheHit)
 	miss := atomic.LoadInt64(&ua.processCacheMiss)
-	hitRatio := round((float64(hit) / float64(hit+miss)) * 100)
-
 	message.NewInt64Field(msg, "ProcessCacheHit", hit, "count")
 	message.NewInt64Field(msg, "ProcessCacheMiss", miss, "count")
-	message.NewInt64Field(msg, "ProcessCacheHitRatio", hitRatio, "percent")
-	message.NewInt64Field(msg, "ProcessCacheSize", ua.cache.Len(), "count")
-	message.NewInt64Field(msg, "ProcessCacheMaxSize", ua.conf.CacheSize, "count")
+
+	hitRatio := round((float64(hit) / float64(hit+miss)) * 100)
+	f, err := message.NewField("ProcessCacheHitRatio", hitRatio, "percent")
+	if err == nil {
+		msg.AddField(f)
+	}
+
+	message.NewIntField(msg, "ProcessCacheSize", ua.cache.Len(), "count")
+	message.NewIntField(msg, "ProcessCacheMaxSize", ua.conf.CacheSize, "count")
 
 	return nil
 }
