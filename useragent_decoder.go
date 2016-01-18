@@ -16,6 +16,7 @@ type UserAgentDecoderConfig struct {
 }
 
 type UserAgentDecoder struct {
+	conf          *UserAgentDecoderConfig
 	UserAgentFile string
 	SourceField   string
 	CacheSize     int
@@ -38,26 +39,23 @@ func (ua *UserAgentDecoder) SetPipelineConfig(pConfig *PipelineConfig) {
 }
 
 func (ua *UserAgentDecoder) Init(config interface{}) (err error) {
-	conf := config.(*UserAgentDecoderConfig)
+	ua.conf = config.(*UserAgentDecoderConfig)
 
-	if conf.SourceField == "" {
+	if ua.conf.SourceField == "" {
 		return errors.New("`source_field` must be specified")
 	}
 
-	ua.SourceField = conf.SourceField
-
 	if ua.parser == nil {
-		ua.parser, err = uaparser.New(conf.UserAgentFile)
+		ua.parser, err = uaparser.New(ua.conf.UserAgentFile)
 	}
 	if err != nil {
 		return fmt.Errorf("Could not open user agent regex file: %s\n")
 	}
 
-	if conf.CacheSize > 0 {
-		ua.CacheSize = conf.CacheSize
+	if ua.conf.CacheSize > 0 {
 		// We're just using the default cache values
 		// defined by the LRU library. Should these be tweakable?
-		ua.cache, err = lru.New2Q(ua.CacheSize)
+		ua.cache, err = lru.New2Q(ua.conf.CacheSize)
 		if err != nil {
 			return
 		}
@@ -69,7 +67,7 @@ func (ua *UserAgentDecoder) Init(config interface{}) (err error) {
 func (ua *UserAgentDecoder) GetAgent(uaStr string) (*uaparser.Client, bool) {
 	var uaClient *uaparser.Client
 
-	if ua.CacheSize > 0 {
+	if ua.conf.CacheSize > 0 {
 		if val, ok := ua.cache.Get(uaStr); !ok {
 			uaClient = ua.parser.Parse(uaStr)
 			// TODO We should track cache evictions
@@ -85,7 +83,7 @@ func (ua *UserAgentDecoder) GetAgent(uaStr string) (*uaparser.Client, bool) {
 }
 
 func (ua *UserAgentDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, err error) {
-	var userAgentField, _ = pack.Message.GetFieldValue(ua.SourceField)
+	var userAgentField, _ = pack.Message.GetFieldValue(ua.conf.SourceField)
 
 	agentStr, ok := userAgentField.(string)
 	if !ok {
