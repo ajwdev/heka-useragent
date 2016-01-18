@@ -7,6 +7,9 @@ import (
 	"github.com/mozilla-services/heka/message"
 	. "github.com/mozilla-services/heka/pipeline"
 	"github.com/ua-parser/uap-go/uaparser"
+	"math"
+	"sync"
+	"sync/atomic"
 )
 
 type UserAgentDecoderConfig struct {
@@ -16,13 +19,16 @@ type UserAgentDecoderConfig struct {
 }
 
 type UserAgentDecoder struct {
-	conf          *UserAgentDecoderConfig
-	UserAgentFile string
-	SourceField   string
-	CacheSize     int
-	parser        *uaparser.Parser
-	pConfig       *PipelineConfig
-	cache         *lru.TwoQueueCache
+	conf *UserAgentDecoderConfig
+
+	processMessageCount int64
+	processCacheHit     int64
+	processCacheMiss    int64
+
+	parser     *uaparser.Parser
+	pConfig    *PipelineConfig
+	cache      *lru.TwoQueueCache
+	reportLock sync.Mutex
 }
 
 func (ua *UserAgentDecoder) ConfigStruct() interface{} {
@@ -93,8 +99,14 @@ func (ua *UserAgentDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, e
 	}
 
 	if ua.parser != nil {
-		// TODO Track cache hits/misses
-		uaClient, _ := ua.GetAgent(agentStr)
+		uaClient, cacheHit := ua.GetAgent(agentStr)
+		if cacheHit {
+			atomic.AddInt64(&ua.processCacheHit, 1)
+		} else {
+			atomic.AddInt64(&ua.processCacheMiss, 1)
+		}
+
+		atomic.AddInt64(&ua.processMessageCount, 1)
 
 		var nf *message.Field
 
@@ -155,7 +167,30 @@ func (ua *UserAgentDecoder) Decode(pack *PipelinePack) (packs []*PipelinePack, e
 	return
 }
 
-// TODO Can decoders have metrics like input/output plugins?
+func (ua *UserAgentDecoder) ReportMsg(msg *message.Message) error {
+	ua.reportLock.Lock()
+	defer ua.reportLock.Unlock()
+
+	message.NewInt64Field(msg, "ProcessMessageCount",
+		atomic.LoadInt64(&ua.processMessageCount), "count")
+
+	hit := atomic.LoadInt64(&ua.processCacheHit)
+	miss := atomic.LoadInt64(&ua.processCacheMiss)
+	hitRatio := round((float64(hit) / float64(hit+miss)) * 100)
+
+	message.NewInt64Field(msg, "ProcessCacheHit", hit, "count")
+	message.NewInt64Field(msg, "ProcessCacheMiss", miss, "count")
+	message.NewInt64Field(msg, "ProcessCacheHitRatio", hitRatio, "percent")
+	message.NewInt64Field(msg, "ProcessCacheSize", ua.cache.Len(), "count")
+	message.NewInt64Field(msg, "ProcessCacheMaxSize", ua.conf.CacheSize, "count")
+
+	return nil
+}
+
+func round(f float64) float64 {
+	// Round to 3 decimal places
+	return math.Floor((f*1000)+0.5) / 1000
+}
 
 func init() {
 	RegisterPlugin("UserAgentDecoder", func() interface{} {
