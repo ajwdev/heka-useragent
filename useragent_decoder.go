@@ -47,9 +47,9 @@ func (ua *UserAgentDecoder) Init(config interface{}) (err error) {
 
 	if ua.parser == nil {
 		ua.parser, err = uaparser.New(ua.conf.UserAgentFile)
-	}
-	if err != nil {
-		return fmt.Errorf("Could not open user agent regex file: %s\n")
+		if err != nil {
+			return fmt.Errorf("Could not open user agent regex file: %s\n")
+		}
 	}
 
 	if ua.conf.CacheSize > 0 {
